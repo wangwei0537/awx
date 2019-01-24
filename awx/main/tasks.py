@@ -2169,7 +2169,7 @@ class RunInventoryUpdate(BaseTask):
         if src in CLOUD_PROVIDERS:
             if src in InventorySource.injectors:
                 cloud_cred = inventory_update.get_cloud_credential()
-                injector = InventorySource.injectors[cloud_cred.kind](kwargs['ansible_version'])
+                injector = InventorySource.injectors[src](kwargs['ansible_version'])
                 content = injector.inventory_contents(inventory_update)
                 # must be a statically named file
                 inventory_path = os.path.join(kwargs['private_data_dir'], injector.filename)
