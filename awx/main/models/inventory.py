@@ -1897,6 +1897,20 @@ class gce(PluginFileInjector):
             ret['zones'] = inventory_source.source_regions.split(',')
         return ret
 
+class aws(PluginFileInjector):
+    plugin_name = 'aws_ec2'
+    initial_version = '2.5'
+
+    def inventory_as_dict(self, inventory_source):
+        import sdb; sdb.set_trace()
+        ret = dict(
+            plugin='aws_ec2',
+            regions=inventory_source.source_regions.split(',')
+        )
+        if inventory_source.source_regions:
+            ret['zones'] = inventory_source.source_regions.split(',')
+        return ret
+
 
 for cls in PluginFileInjector.__subclasses__():
     InventorySourceOptions.injectors[cls.__name__] = cls
