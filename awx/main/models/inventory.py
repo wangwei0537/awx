@@ -1905,7 +1905,9 @@ class ec2(PluginFileInjector):
         ret = dict(
             plugin='aws_ec2',
         )
-        if inventory_source.source_regions:  # handle all case?
+        # TODO: all regions currently failing due to:
+        # https://github.com/ansible/ansible/pull/48079
+        if inventory_source.source_regions and 'all' not in inventory_source.source_regions:
             ret['regions'] = inventory_source.source_regions.split(',')
         return ret
 
