@@ -128,9 +128,24 @@ export default ['i18n', function(i18n) {
                     reqExpression: "port_required",
                     init: "false"
                 },
-                ngShow: "notification_type.value == 'email' || notification_type.value == 'irc'",
+                ngShow: "notification_type.value === 'email' || notification_type.value === 'irc'",
                 subForm: 'typeSubForm',
                 ngDisabled: '!(notification_template.summary_fields.user_capabilities.edit || canAdd)'
+            },
+            timeout: {
+                label: i18n._('Timeout'),
+                type: 'number',
+                integer: true,
+                spinner: true,
+                min: 0,
+                default: 0,
+                ngShow: "notification_type.value === 'email'",
+                subForm: 'typeSubForm',
+                ngDisabled: '!(notification_template.summary_fields.user_capabilities.edit || canAdd)',
+                dataTitle: i18n._('Timeout'),
+                dataPlacement: 'right',
+                dataContainer: 'body',
+                awPopOver: "<p>" + i18n._("The amount of time (in seconds) before the email notification stops trying to reach the host and times out. Defaults to 0 for no timeout.") + "</p>",
             },
             channels: {
                 label: i18n._('Destination Channels'),
@@ -144,7 +159,7 @@ export default ['i18n', function(i18n) {
                     reqExpression: "channel_required",
                     init: "false"
                 },
-                ngShow: "notification_type.value == 'slack'",
+                ngShow: "notification_type.value === 'slack'",
                 subForm: 'typeSubForm',
                 ngDisabled: '!(notification_template.summary_fields.user_capabilities.edit || canAdd)'
             },

@@ -22,6 +22,7 @@ function (i18n) {
             obj.rocketchat_required = false;
             obj.token_required = false;
             obj.port_required = false;
+            obj.timeout_required = false;
             obj.password_required = false;
             obj.channel_required = false;
             obj.room_required = false;
