@@ -452,6 +452,9 @@ class Credential(PasswordFieldsModel, CommonModelNameNotUnique, ResourceMixin):
             return self.inputs[field_name]
         if 'default' in kwargs:
             return kwargs['default']
+        for field in self.credential_type.inputs.get('fields', []):
+            if field['id'] == field_name and 'default' in field:
+                return field['default']
         raise AttributeError(field_name)
 
     def has_input(self, field_name):
@@ -973,7 +976,8 @@ ManagedCredentialType(
         }, {
             'id': 'verify_ssl',
             'label': ugettext_noop('Verify SSL'),
-            'type': 'boolean'
+            'type': 'boolean',
+            'default': True,
         }],
         'required': ['username', 'password', 'host', 'project']
     }
