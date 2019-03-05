@@ -2094,6 +2094,8 @@ class ec2(PluginFileInjector):
         ret = super(ec2, self).inventory_as_dict(inventory_update, private_data_dir)
 
         keyed_groups = []
+        # TODO: allow unsafe group names if compatibility mode is on
+        # or if replace_dash_in_groups is given in source_vars
         group_by_hostvar = {
             'ami_id': {'prefix': '', 'separator': '', 'key': 'image_id'},
             'availability_zone': {'prefix': '', 'separator': '', 'key': 'placement.availability_zone'},
