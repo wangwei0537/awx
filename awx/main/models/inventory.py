@@ -2074,9 +2074,7 @@ class ec2(PluginFileInjector):
             'ec2_image_id': 'image_id',
             'ec2_instance_type': 'instance_type',
             'ec2_key_name': 'key_name',
-            # ec2_launch_time: 'launch_time | regex_replace(" ", "T") | regex_replace("(\+)(\d\d):(\d)(\d)$", ".\g<2>\g<3>Z")'
-            # ^ timestamp format compatibility, we could, but should we??
-            'ec2_launch_time': 'launch_time',
+            'ec2_launch_time': 'launch_time | regex_replace(" ", "T") | regex_replace("(\+)(\d\d):(\d)(\d)$", ".\g<2>\g<3>Z")',
             'ec2_platform': 'platform | default("")',
             'ec2_private_dns_name': 'private_dns_name',
             'ec2_private_ip_address': 'private_ip_address',
@@ -2087,7 +2085,9 @@ class ec2(PluginFileInjector):
             'ec2_spot_instance_request_id': 'spot_instance_request_id',
             'ec2_subnet_id': 'subnet_id',
             'ec2_virtualization_type': 'virtualization_type',
-            'ec2_vpc_id': 'vpc_id'
+            'ec2_vpc_id': 'vpc_id',
+            # same as ec2_ip_address, the script provided this
+            'ansible_host': 'public_ip_address',
         }
 
     def inventory_as_dict(self, inventory_update, private_data_dir):
@@ -2097,21 +2097,21 @@ class ec2(PluginFileInjector):
         # TODO: allow unsafe group names if compatibility mode is on
         # or if replace_dash_in_groups is given in source_vars
         group_by_hostvar = {
-            'ami_id': {'prefix': '', 'separator': '', 'key': 'image_id'},
-            'availability_zone': {'prefix': '', 'separator': '', 'key': 'placement.availability_zone'},
-            'aws_account': None,  # not an option with plugin
-            'instance_id': {'prefix': '', 'separator': '', 'key': 'instance_id'},  # normally turned off
-            'instance_state': {'prefix': 'instance_state', 'key': 'state.name'},
-            'platform': {'prefix': 'platform', 'key': 'platform'},
-            'instance_type': {'prefix': 'type', 'key': 'instance_type'},
-            'key_pair': {'prefix': 'key', 'key': 'key_name'},
-            'region': {'prefix': '', 'separator': '', 'key': 'placement.region'},
+            'ami_id': {'prefix': '', 'separator': '', 'key': 'image_id', 'parent_group': 'images'},
+            'availability_zone': {'prefix': '', 'separator': '', 'key': 'placement.availability_zone', 'parent_group': 'zones'},
+            'aws_account': {'prefix': '', 'separator': '', 'key': 'network_interfaces | json_query("[0].owner_id")', 'parent_group': 'accounts'},
+            'instance_id': {'prefix': '', 'separator': '', 'key': 'instance_id', 'parent_group': 'instances'},  # normally turned off
+            'instance_state': {'prefix': 'instance_state', 'key': 'state.name', 'parent_group': 'instance_states'},
+            'platform': {'prefix': 'platform', 'key': 'platform', 'parent_group': 'platforms'},
+            'instance_type': {'prefix': 'type', 'key': 'instance_type', 'parent_group': 'types'},
+            'key_pair': {'prefix': 'key', 'key': 'key_name', 'parent_group': 'keys'},
+            'region': {'prefix': '', 'separator': '', 'key': 'placement.region', 'parent_group': 'regions'},
             # Security requires some ninja jinja2 syntax, credit to s-hertel
-            'security_group': {'prefix': 'security_group', 'key': 'security_groups | json_query("[].group_name")'},
-            'tag_keys': {'prefix': 'tag', 'key': 'tags'},
+            'security_group': {'prefix': 'security_group', 'key': 'security_groups | json_query("[].group_name")', 'parent_group': 'security_groups'},
+            'tag_keys': {'prefix': 'tag', 'key': 'tags', 'parent_group': 'tags'},
             'tag_none': None,  # grouping by no tags isn't a different thing with plugin
             # naming is redundant, like vpc_id_vpc_8c412cea, but intended
-            'vpc_id': {'prefix': 'vpc_id', 'key': 'vpc_id'},
+            'vpc_id': {'prefix': 'vpc_id', 'key': 'vpc_id', 'parent_group': 'vpcs'},
         }
         # -- same as script here --
         group_by = [x.strip().lower() for x in inventory_update.group_by.split(',') if x.strip()]
@@ -2245,6 +2245,7 @@ class gce(PluginFileInjector):
             'gce_subnetwork': 'networkInterfaces | json_query("[0].subnetwork.name")',
             'gce_tags': 'tags | json_query("items")',
             'gce_zone': 'zone',
+            'gce_metadata': 'metadata.get("items", []) | items2dict(key_name="key", value_name="value")',
             # We need this as long as hostnames is non-default, otherwise hosts
             # will not be addressed correctly, was returned in script
             'ansible_ssh_host': 'networkInterfaces | json_query("[0].accessConfigs[0].natIP")'
