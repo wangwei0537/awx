@@ -24,6 +24,7 @@ from django.utils.translation import ugettext_lazy as _
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils.timezone import now
+from django.utils.encoding import iri_to_uri
 from django.db.models import Q
 
 # REST Framework
@@ -2565,8 +2566,9 @@ class cloudforms(PluginFileInjector):
 
 
 class tower(PluginFileInjector):
-    plugin_name = 'tower'  # FIXME: fix license issue and implement me
+    plugin_name = 'tower'
     base_injector = 'template'
+    initial_version = '2.8'
 
     def get_script_env(self, inventory_update, private_data_dir, private_data_files):
         env = super(tower, self).get_script_env(inventory_update, private_data_dir, private_data_files)
@@ -2576,9 +2578,15 @@ class tower(PluginFileInjector):
 
     def inventory_as_dict(self, inventory_update, private_data_dir):
         # Credentials injected as env vars, same as script
+        try:
+            # plugin can take an actual int type
+            identifier = int(inventory_update.instance_filters)
+        except ValueError:
+            # inventory_id could be a named URL
+            identifier = iri_to_uri(inventory_update.instance_filters)
         return {
             'plugin': self.plugin_name,
-            'inventory_id': int(inventory_update.instance_filters),
+            'inventory_id': identifier,
             'include_metadata': True  # used for license check
         }
 

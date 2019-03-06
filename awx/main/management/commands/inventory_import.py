@@ -909,7 +909,9 @@ class Command(BaseCommand):
         # special check for tower-type inventory sources
         # but only if running the plugin
         if self.inventory_source.source == 'tower' and ('tower.yml' in self.source or 'tower.yaml' in self.source):
-            self.remote_tower_license_compare(local_license_type)
+            # only if this is the 2nd call to license check, we cannot compare before running plugin
+            if hasattr(self, 'all_group'):
+                self.remote_tower_license_compare(local_license_type)
         if free_instances < 0:
             d = {
                 'new_count': new_count,

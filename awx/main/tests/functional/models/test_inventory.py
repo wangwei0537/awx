@@ -277,6 +277,16 @@ class TestInventorySourceInjectors:
         assert len(compat_off['keyed_groups']) == 1
         assert 'powerstate' in compat_off['keyed_groups'][0].get('key')
 
+    def test_tower_plugin_named_url(self):
+        injector = InventorySource.injectors['tower']('2.9')
+        inv_src = InventorySource(
+            name='my tower source', source='tower',
+            # named URL pattern "inventory++organization"
+            instance_filters='Designer hair 읰++Cosmetic_products䵆'
+        )
+        result = injector.inventory_as_dict(inv_src, '/tmp/foo')
+        assert result['inventory_id'] == 'Designer%20hair%20%EC%9D%B0++Cosmetic_products%E4%B5%86'
+
 
 @pytest.fixture
 def setup_ec2_gce(organization):
