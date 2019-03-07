@@ -1973,9 +1973,13 @@ class azure_rm(PluginFileInjector):
             # Groups that the script returned, group_by field was never implemented
             ret['keyed_groups'] = [
                 {'prefix': '', 'separator': '', 'key': 'location'},
-                {'prefix': '', 'separator': '', 'key': 'powerstate'},
-                {'prefix': '', 'separator': '', 'key': 'name'}
+                # Introduced with https://github.com/ansible/ansible/pull/53046
+                {'prefix': '', 'separator': '', 'key': 'security_group'},
+                {'prefix': '', 'separator': '', 'key': 'resource_group'},
+                {'prefix': '', 'separator': '', 'key': 'os_disk["operating_system_type"]'}
             ]
+            # One static group that was returned by script
+            ret['conditional_groups'] = [{'azure': True}]
             # Compatibility hostvars
             ret['hostvar_expressions'] = {
                 'provisioning_state': 'provisioning_state | title',
