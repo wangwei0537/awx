@@ -1979,7 +1979,7 @@ class azure_rm(PluginFileInjector):
                 {'prefix': '', 'separator': '', 'key': 'os_disk["operating_system_type"]'}
             ]
             # One static group that was returned by script
-            ret['conditional_groups'] = [{'azure': True}]
+            ret['conditional_groups'] = {'azure': True}
             # Compatibility hostvars
             ret['hostvar_expressions'] = {
                 'provisioning_state': 'provisioning_state | title',
