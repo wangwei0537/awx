@@ -2128,6 +2128,34 @@ class ec2(PluginFileInjector):
                 # If a keyed group syntax does not exist, there is nothing we can do to get this group
                 if this_keyed_group is not None:
                     keyed_groups.append(this_keyed_group)
+
+        source_vars = inventory_update.source_vars_dict
+        # This is a setting from the script, hopefully no one used it
+        # if true, it replaces dashes, but not in region / loc names
+        replace_dash = source_vars.get('replace_dash_in_groups', True)
+        if inventory_update.compatibility_mode:
+            # this option, a plugin option, will allow dashes
+            ret['use_legacy_script_group_name_sanitization'] = True
+            # If we do not want to replace dashes, dashes are okay, then
+            # this setting by itself is okay
+            #
+            # If we DO replace dashes, we cannot rely on the setting
+            if replace_dash:
+                # no, we do not want dashes in "groups", but we _always_
+                # want dashes in region-ish groups for the script standards
+                for grouping_data in keyed_groups:
+                    grouping_name = grouping_data['parent_group']
+                    if grouping_name in ('regions', 'zones'):  # definition of region-ish
+                        # us-east-2 is always us-east-2 according to ec2.py
+                        # safeness be damned
+                        continue
+                    # Perform manual replacement of dashes
+                    grouping_data['key'] += ' | regex_replace("-", "_")'
+
+        elif not replace_dash:
+            # Using the plugin, but still want dashes whitelisted
+            ret['use_legacy_script_group_name_sanitization'] = True
+
         if keyed_groups:
             ret['keyed_groups'] = keyed_groups
 
