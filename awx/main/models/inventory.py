@@ -1967,6 +1967,15 @@ class azure_rm(PluginFileInjector):
     def inventory_as_dict(self, inventory_update, private_data_dir):
         ret = super(azure_rm, self).inventory_as_dict(inventory_update, private_data_dir)
 
+        source_vars = inventory_update.source_vars_dict
+        if 'replace_dash_in_groups' in source_vars:
+            ret['use_legacy_script_group_name_sanitization'] = not source_vars['replace_dash_in_groups']
+        elif inventory_update.compatibility_mode:
+            # default value of replace_dash_in_groups in azure_rm.py is False,
+            # opposite of ec2, which it took it from
+            # Value of False (keep dashes) dashes means legacy=True (non-default, dashes whitelisted)
+            ret['use_legacy_script_group_name_sanitization'] = True
+
         if inventory_update.compatibility_mode:
             # By default the script did not filter hosts
             ret['default_host_filters'] = []
@@ -1987,15 +1996,16 @@ class azure_rm(PluginFileInjector):
                 'type': 'resource_type',
                 'private_ip': 'private_ipv4_addresses | json_query("[0]")'
             }
-        elif inventory_update.group_by:
-            # Group by whatever user gave us, give standard plugin behavior
-            ret['keyed_groups'] = [{'key': x.strip()} for x in inventory_update.group_by.split(',') if x.strip()]
-        elif inventory_update.instance_filters:
-            ret.setdefault('exclude_host_filters', [])
-            for filter in inventory_update.instance_filters.split(','):
-                if not filter:
-                    continue
-                ret['exclude_host_filters'].append(filter)
+        else:
+            if inventory_update.group_by:
+                # Group by whatever user gave us, give standard plugin behavior
+                ret['keyed_groups'] = [{'key': x.strip()} for x in inventory_update.group_by.split(',') if x.strip()]
+            if inventory_update.instance_filters:
+                ret.setdefault('exclude_host_filters', [])
+                for filter in inventory_update.instance_filters.split(','):
+                    if not filter:
+                        continue
+                    ret['exclude_host_filters'].append(filter)
 
         if inventory_update.source_regions and 'all' not in inventory_update.source_regions:
             # initialize a list for this section in inventory file
@@ -2099,35 +2109,45 @@ class ec2(PluginFileInjector):
         ret = super(ec2, self).inventory_as_dict(inventory_update, private_data_dir)
 
         keyed_groups = []
-        # TODO: allow unsafe group names if compatibility mode is on
-        # or if replace_dash_in_groups is given in source_vars
         group_by_hostvar = {
             'ami_id': {'prefix': '', 'separator': '', 'key': 'image_id', 'parent_group': 'images'},
             'availability_zone': {'prefix': '', 'separator': '', 'key': 'placement.availability_zone', 'parent_group': 'zones'},
             'aws_account': {'prefix': '', 'separator': '', 'key': 'network_interfaces | json_query("[0].owner_id")', 'parent_group': 'accounts'},
             'instance_id': {'prefix': '', 'separator': '', 'key': 'instance_id', 'parent_group': 'instances'},  # normally turned off
             'instance_state': {'prefix': 'instance_state', 'key': 'state.name', 'parent_group': 'instance_states'},
-            'platform': {'prefix': 'platform', 'key': 'platform', 'parent_group': 'platforms'},
+            'platform': {'prefix': 'platform', 'key': 'platform | default("undefined")', 'parent_group': 'platforms'},
             'instance_type': {'prefix': 'type', 'key': 'instance_type', 'parent_group': 'types'},
             'key_pair': {'prefix': 'key', 'key': 'key_name', 'parent_group': 'keys'},
             'region': {'prefix': '', 'separator': '', 'key': 'placement.region', 'parent_group': 'regions'},
             # Security requires some ninja jinja2 syntax, credit to s-hertel
             'security_group': {'prefix': 'security_group', 'key': 'security_groups | json_query("[].group_name")', 'parent_group': 'security_groups'},
-            'tag_keys': {'prefix': 'tag', 'key': 'tags', 'parent_group': 'tags'},
-            'tag_none': None,  # grouping by no tags isn't a different thing with plugin
+            'tag_keys': [
+                {'prefix': 'tag', 'key': 'tags', 'parent_group': 'tags'},
+                {'prefix': 'tag', 'key': 'tags.keys()', 'parent_group': 'tags'}
+            ],
+            # 'tag_none': None,  # grouping by no tags isn't a different thing with plugin
             # naming is redundant, like vpc_id_vpc_8c412cea, but intended
             'vpc_id': {'prefix': 'vpc_id', 'key': 'vpc_id', 'parent_group': 'vpcs'},
         }
-        # -- same as script here --
+        # -- same-ish as script here --
         group_by = [x.strip().lower() for x in inventory_update.group_by.split(',') if x.strip()]
         for choice in inventory_update.get_ec2_group_by_choices():
-            value = bool((group_by and choice[0] in group_by) or (not group_by and choice[0] != 'instance_id'))
+            value = bool(
+                (
+                    group_by and choice[0] in group_by
+                ) or (
+                    (not group_by) and inventory_update.compatibility_mode and choice[0] != 'instance_id'
+                )
+            )
             # -- end sameness to script --
             if value:
                 this_keyed_group = group_by_hostvar.get(choice[0], None)
                 # If a keyed group syntax does not exist, there is nothing we can do to get this group
                 if this_keyed_group is not None:
-                    keyed_groups.append(this_keyed_group)
+                    if isinstance(this_keyed_group, list):
+                        keyed_groups.extend(this_keyed_group)
+                    else:
+                        keyed_groups.append(this_keyed_group)
 
         source_vars = inventory_update.source_vars_dict
         # This is a setting from the script, hopefully no one used it
@@ -2149,8 +2169,13 @@ class ec2(PluginFileInjector):
                         # us-east-2 is always us-east-2 according to ec2.py
                         # safeness be damned
                         continue
-                    # Perform manual replacement of dashes
-                    grouping_data['key'] += ' | regex_replace("-", "_")'
+                    if grouping_data['key'] == 'tags':
+                        grouping_data['key'] = 'dict(tags.keys() | map("regex_replace", "-", "_") | list | zip(tags.values() | map("regex_replace", "-", "_") | list))'
+                    elif grouping_data['key'] == 'tags.keys()' or grouping_data['prefix'] == 'security_group':
+                        grouping_data['key'] += ' | map("regex_replace", "-", "_") | list'
+                    else:
+                        # Perform manual replacement of dashes
+                        grouping_data['key'] += ' | regex_replace("-", "_")'
 
         elif not replace_dash:
             # Using the plugin, but still want dashes whitelisted
@@ -2300,6 +2325,8 @@ class gce(PluginFileInjector):
         compose_dict = {'gce_id': 'id'}
 
         if inventory_update.compatibility_mode:
+            # The gce.py script never sanitized any names in any way
+            ret['use_legacy_script_group_name_sanitization'] = True
             # gce never processed the group_by field, if it had, we would selectively
             # apply those options here, but it did not, so all groups are added here
             keyed_groups = [
