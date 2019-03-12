@@ -2094,7 +2094,7 @@ class ec2(PluginFileInjector):
             'ec2_image_id': 'image_id',
             'ec2_instance_type': 'instance_type',
             'ec2_key_name': 'key_name',
-            'ec2_launch_time': 'launch_time | regex_replace(" ", "T") | regex_replace("(\+)(\d\d):(\d)(\d)$", ".\g<2>\g<3>Z")',
+            'ec2_launch_time': r'launch_time | regex_replace(" ", "T") | regex_replace("(\+)(\d\d):(\d)(\d)$", ".\g<2>\g<3>Z")',
             'ec2_platform': 'platform | default("")',
             'ec2_private_dns_name': 'private_dns_name',
             'ec2_private_ip_address': 'private_ip_address',
