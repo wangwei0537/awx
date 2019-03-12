@@ -270,7 +270,7 @@ class TestInventorySourceInjectors:
         )
         compat_on = injector.inventory_as_dict(inv_src, '/tmp/foo')
         # suspicious, yes, that is just what the script did
-        assert len(compat_on['keyed_groups']) == 3
+        assert len(compat_on['keyed_groups']) == 4
         inv_src.compatibility_mode = False
         compat_off = injector.inventory_as_dict(inv_src, '/tmp/foo')
         # much better, everyone should turn off the flag and live in the future

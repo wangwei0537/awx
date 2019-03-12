@@ -1974,11 +1974,8 @@ class azure_rm(PluginFileInjector):
         source_vars = inventory_update.source_vars_dict
 
         if inventory_update.compatibility_mode:
-            # default value of replace_dash_in_groups in azure_rm.py is False,
-            # opposite of ec2, which it took it from
-            replace_dash = source_vars.get('replace_dash_in_groups', False)
-            # Value of False (keep dashes) dashes means legacy_mode=True (non-default, dashes whitelisted)
-            # value of True means that we still need to redact unicode
+            # Dashes actually were not configurable in azure_rm.py script
+            # however, we do not want unicode, so we use this
             ret['use_contrib_script_compatible_sanitization'] = True
             # By default the script did not filter hosts
             ret['default_host_filters'] = []
@@ -1990,13 +1987,6 @@ class azure_rm(PluginFileInjector):
                 {'prefix': '', 'separator': '', 'key': 'resource_group'},
                 {'prefix': '', 'separator': '', 'key': 'os_disk.operating_system_type'}
             ]
-
-            if replace_dash:
-                # We _want_ unicode, but do _not_ want the dash
-                # legacy sanitization setting is _on_ (destroys unicode)
-                for grouping_data in ret['keyed_groups']:
-                    # manually replace the dash
-                    grouping_data['key'] += ' | regex_replace("-", "_")'
 
             # One static group that was returned by script
             ret['conditional_groups'] = {'azure': True}
