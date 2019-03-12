@@ -1,3 +1,5 @@
+conditional_groups:
+  azure: true
 default_host_filters: []
 exclude_host_filters:
 - location not in ['southcentralus', 'westus']
@@ -10,10 +12,14 @@ keyed_groups:
 - key: location
   prefix: ''
   separator: ''
-- key: powerstate
+- key: security_group
   prefix: ''
   separator: ''
-- key: name
+- key: resource_group
+  prefix: ''
+  separator: ''
+- key: os_disk.operating_system_type
   prefix: ''
   separator: ''
 plugin: azure_rm
+use_contrib_script_compatible_sanitization: true

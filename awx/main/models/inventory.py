@@ -1869,7 +1869,11 @@ class PluginFileInjector(object):
     def inventory_contents(self, inventory_update, private_data_dir):
         """Returns a string that is the content for the inventory file for the inventory plugin
         """
-        return yaml.safe_dump(self.inventory_as_dict(inventory_update, private_data_dir), default_flow_style=False)
+        return yaml.safe_dump(
+            self.inventory_as_dict(inventory_update, private_data_dir),
+            default_flow_style=False,
+            width=1000
+        )
 
     def should_use_plugin(self):
         return bool(
@@ -1968,15 +1972,14 @@ class azure_rm(PluginFileInjector):
         ret = super(azure_rm, self).inventory_as_dict(inventory_update, private_data_dir)
 
         source_vars = inventory_update.source_vars_dict
-        if 'replace_dash_in_groups' in source_vars:
-            ret['use_legacy_script_group_name_sanitization'] = not source_vars['replace_dash_in_groups']
-        elif inventory_update.compatibility_mode:
-            # default value of replace_dash_in_groups in azure_rm.py is False,
-            # opposite of ec2, which it took it from
-            # Value of False (keep dashes) dashes means legacy=True (non-default, dashes whitelisted)
-            ret['use_legacy_script_group_name_sanitization'] = True
 
         if inventory_update.compatibility_mode:
+            # default value of replace_dash_in_groups in azure_rm.py is False,
+            # opposite of ec2, which it took it from
+            replace_dash = source_vars.get('replace_dash_in_groups', False)
+            # Value of False (keep dashes) dashes means legacy_mode=True (non-default, dashes whitelisted)
+            # value of True means that we still need to redact unicode
+            ret['use_contrib_script_compatible_sanitization'] = True
             # By default the script did not filter hosts
             ret['default_host_filters'] = []
             # Groups that the script returned, group_by field was never implemented
@@ -1985,8 +1988,16 @@ class azure_rm(PluginFileInjector):
                 # Introduced with https://github.com/ansible/ansible/pull/53046
                 {'prefix': '', 'separator': '', 'key': 'security_group'},
                 {'prefix': '', 'separator': '', 'key': 'resource_group'},
-                {'prefix': '', 'separator': '', 'key': 'os_disk["operating_system_type"]'}
+                {'prefix': '', 'separator': '', 'key': 'os_disk.operating_system_type'}
             ]
+
+            if replace_dash:
+                # We _want_ unicode, but do _not_ want the dash
+                # legacy sanitization setting is _on_ (destroys unicode)
+                for grouping_data in ret['keyed_groups']:
+                    # manually replace the dash
+                    grouping_data['key'] += ' | regex_replace("-", "_")'
+
             # One static group that was returned by script
             ret['conditional_groups'] = {'azure': True}
             # Compatibility hostvars
@@ -1997,6 +2008,10 @@ class azure_rm(PluginFileInjector):
                 'private_ip': 'private_ipv4_addresses | json_query("[0]")'
             }
         else:
+            # Hopefully no one is using this after moving to plugins, but applying this
+            # setting will at least trigger the global redactor to warn user
+            if 'replace_dash_in_groups' in source_vars:
+                ret['use_contrib_script_compatible_sanitization'] = not source_vars['replace_dash_in_groups']
             if inventory_update.group_by:
                 # Group by whatever user gave us, give standard plugin behavior
                 ret['keyed_groups'] = [{'key': x.strip()} for x in inventory_update.group_by.split(',') if x.strip()]
@@ -2152,34 +2167,37 @@ class ec2(PluginFileInjector):
         source_vars = inventory_update.source_vars_dict
         # This is a setting from the script, hopefully no one used it
         # if true, it replaces dashes, but not in region / loc names
-        replace_dash = source_vars.get('replace_dash_in_groups', True)
+        replace_dash = bool(source_vars.get('replace_dash_in_groups', True))
         if inventory_update.compatibility_mode:
-            # this option, a plugin option, will allow dashes
-            ret['use_legacy_script_group_name_sanitization'] = True
-            # If we do not want to replace dashes, dashes are okay, then
-            # this setting by itself is okay
-            #
-            # If we DO replace dashes, we cannot rely on the setting
-            if replace_dash:
-                # no, we do not want dashes in "groups", but we _always_
-                # want dashes in region-ish groups for the script standards
-                for grouping_data in keyed_groups:
-                    grouping_name = grouping_data['parent_group']
-                    if grouping_name in ('regions', 'zones'):  # definition of region-ish
-                        # us-east-2 is always us-east-2 according to ec2.py
-                        # safeness be damned
-                        continue
-                    if grouping_data['key'] == 'tags':
-                        grouping_data['key'] = 'dict(tags.keys() | map("regex_replace", "-", "_") | list | zip(tags.values() | map("regex_replace", "-", "_") | list))'
-                    elif grouping_data['key'] == 'tags.keys()' or grouping_data['prefix'] == 'security_group':
-                        grouping_data['key'] += ' | map("regex_replace", "-", "_") | list'
-                    else:
-                        # Perform manual replacement of dashes
-                        grouping_data['key'] += ' | regex_replace("-", "_")'
+            legacy_regex = {
+                True: r"[^A-Za-z0-9\_]",
+                False: r"[^A-Za-z0-9\_\-]"  # do not replace dash, dash is whitelisted
+            }[replace_dash]
+            list_replacer = 'map("regex_replace", "{rx}", "_") | list'.format(rx=legacy_regex)
+            # this option, a plugin option, will allow dashes, but not unicode
+            # when set to False, unicode will be allowed, but it was not allowed by script
+            # thus, we always have to use this option, and always use our custom regex
+            ret['use_contrib_script_compatible_sanitization'] = True
+            for grouping_data in keyed_groups:
+                if grouping_data['parent_group'] in ('regions', 'zones'):  # definition of region-ish
+                    # us-east-2 is always us-east-2 according to ec2.py
+                    # no sanitization in region-ish groups for the script standards, ever ever
+                    continue
+                if grouping_data['key'] == 'tags':
+                    # dict jinja2 transformation
+                    grouping_data['key'] = 'dict(tags.keys() | {replacer} | zip(tags.values() | {replacer}))'.format(
+                        replacer=list_replacer
+                    )
+                elif grouping_data['key'] == 'tags.keys()' or grouping_data['prefix'] == 'security_group':
+                    # list jinja2 transformation
+                    grouping_data['key'] += ' | {replacer}'.format(replacer=list_replacer)
+                else:
+                    # string transformation
+                    grouping_data['key'] += ' | regex_replace("{rx}", "_")'.format(rx=legacy_regex)
 
         elif not replace_dash:
             # Using the plugin, but still want dashes whitelisted
-            ret['use_legacy_script_group_name_sanitization'] = True
+            ret['use_contrib_script_compatible_sanitization'] = True
 
         if keyed_groups:
             ret['keyed_groups'] = keyed_groups
@@ -2326,7 +2344,7 @@ class gce(PluginFileInjector):
 
         if inventory_update.compatibility_mode:
             # The gce.py script never sanitized any names in any way
-            ret['use_legacy_script_group_name_sanitization'] = True
+            ret['use_contrib_script_compatible_sanitization'] = True
             # gce never processed the group_by field, if it had, we would selectively
             # apply those options here, but it did not, so all groups are added here
             keyed_groups = [

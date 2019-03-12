@@ -4,6 +4,7 @@ compose:
   gce_description: description | default(None)
   gce_id: id
   gce_machine_type: machineType
+  gce_metadata: metadata.get("items", []) | items2dict(key_name="key", value_name="value")
   gce_name: name
   gce_network: networkInterfaces | json_query("[0].network.name")
   gce_private_ip: networkInterfaces | json_query("[0].networkIP")
@@ -37,6 +38,7 @@ plugin: gcp_compute
 projects:
 - fooo
 service_account_file: {{ file_reference }}
+use_contrib_script_compatible_sanitization: true
 zones:
 - us-east4-a
 - us-west1-b

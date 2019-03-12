@@ -20,7 +20,8 @@ TEST_SOURCE_FIELDS = {
     },
     'ec2': {
         'instance_filters': 'foobaa',
-        'group_by': 'availability_zone,instance_type',  # has defined choices
+        # group_by selected to capture some non-trivial cross-interactions
+        'group_by': 'availability_zone,instance_type,tag_keys,region',
         'source_regions': 'us-east-2,ap-south-1'
     },
     'gce': {
@@ -249,8 +250,8 @@ def test_inventory_update_injected_content(this_kind, script_or_plugin, inventor
         If MAKE_INVENTORY_REFERENCE_FILES is set, it will produce reference files
         """
         private_data_dir = call_env.pop('AWX_PRIVATE_DATA_DIR')
-        plugin_setting = call_env.pop('ANSIBLE_INVENTORY_ENABLED')
-        assert plugin_setting == 'auto' if use_plugin else 'script'
+        assert call_env.pop('ANSIBLE_INVENTORY_ENABLED') == ('auto' if use_plugin else 'script')
+        assert call_env.pop('ANSIBLE_TRANSFORM_INVALID_GROUP_CHARS') == 'never'
         set_files = bool(os.getenv("MAKE_INVENTORY_REFERENCE_FILES", 'false').lower()[0] not in ['f', '0'])
         env, content = read_content(private_data_dir, call_env, inventory_update)
         base_dir = os.path.join(DATA, script_or_plugin)
@@ -286,6 +287,10 @@ def test_inventory_update_injected_content(this_kind, script_or_plugin, inventor
             assert ref_env == env
         return ('successful', 0)
 
+    mock_licenser = mock.Mock(return_value=mock.Mock(
+        validate=mock.Mock(return_value={'license_type': 'open'})
+    ))
+
     # Mock this so that it will not send events to the callback receiver
     # because doing so in pytest land creates large explosions
     with mock.patch('awx.main.queue.CallbackQueueDispatcher.dispatch', lambda self, obj: None):
@@ -295,5 +300,7 @@ def test_inventory_update_injected_content(this_kind, script_or_plugin, inventor
             with mock.patch.object(UnifiedJob, 'websocket_emit_status', mock.Mock()):
                 # The point of this test is that we replace run_pexpect with assertions
                 with mock.patch('awx.main.expect.run.run_pexpect', substitute_run):
-                    # so this sets up everything for a run and then yields control over to substitute_run
-                    task.run(inventory_update.pk)
+                    # mocking the licenser is necessary for the tower source
+                    with mock.patch('awx.main.models.inventory.get_licenser', mock_licenser):
+                        # so this sets up everything for a run and then yields control over to substitute_run
+                        task.run(inventory_update.pk)

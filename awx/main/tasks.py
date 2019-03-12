@@ -1923,9 +1923,9 @@ class RunInventoryUpdate(BaseTask):
         # Automatic transformation of group names
         # https://github.com/ansible/ansible/pull/52748
         if inventory_update.compatibility_mode:
-            env['ANSIBLE_TRANSFORM_INVALID_GROUP_CHARS'] = str(False)
+            env['ANSIBLE_TRANSFORM_INVALID_GROUP_CHARS'] = 'never'
         else:
-            env['ANSIBLE_TRANSFORM_INVALID_GROUP_CHARS'] = str(True)
+            env['ANSIBLE_TRANSFORM_INVALID_GROUP_CHARS'] = 'always'
 
         if inventory_update.source in ['scm', 'custom']:
             for env_k in inventory_update.source_vars_dict:
